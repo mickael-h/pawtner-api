@@ -1,0 +1,28 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Node / React Native (if applicable)
+node_modules/
+dist/
+build/
+android/app/build/
+ios/Pods/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Cursor / tooling
+.cursor/
