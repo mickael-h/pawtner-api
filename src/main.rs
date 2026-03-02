@@ -1,13 +1,5 @@
-//! Pawtner API — Axum backend (see docs/ARCHITECTURE.md).
-
-mod config;
-mod error;
-mod handlers;
-mod middleware;
-mod routes;
-mod state;
-
 use axum::Router;
+use pawtner_api::{config, routes, state};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;

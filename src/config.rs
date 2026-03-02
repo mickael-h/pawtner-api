@@ -16,7 +16,7 @@ impl Config {
         let database_url = std::env::var("DATABASE_URL")
             .map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
         let keycloak_issuer = std::env::var("KEYCLOAK_ISSUER")
-            .unwrap_or_else(|_| "http://localhost:8080/realms/pawtner".to_string());
+            .map_err(|_| anyhow::anyhow!("KEYCLOAK_ISSUER must be set"))?;
         let keycloak_jwks_uri = std::env::var("KEYCLOAK_JWKS_URI").unwrap_or_else(|_| {
             format!(
                 "{}/protocol/openid-connect/certs",
@@ -24,7 +24,7 @@ impl Config {
             )
         });
         let keycloak_audience = std::env::var("KEYCLOAK_AUDIENCE")
-            .unwrap_or_else(|_| "pawtner-mobile".to_string());
+            .map_err(|_| anyhow::anyhow!("KEYCLOAK_AUDIENCE must be set"))?;
         let port: u16 = std::env::var("PORT")
             .ok()
             .and_then(|p| p.parse().ok())

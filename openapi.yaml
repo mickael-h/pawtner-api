@@ -1,0 +1,162 @@
+openapi: 3.0.3
+info:
+  title: Pawtner API
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/v1/me/context:
+    get:
+      summary: Current user context
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User context
+  /api/v1/marketplace/offers:
+    get:
+      summary: List marketplace offers
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: page_size
+          schema: { type: integer, minimum: 1, maximum: 50 }
+        - in: query
+          name: animal_type
+          schema: { type: string, enum: [dog, cat, horse] }
+        - in: query
+          name: listing_type
+          schema: { type: string, enum: [sale, stud] }
+        - in: query
+          name: location
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string, enum: [draft, published, archived] }
+      responses:
+        '200':
+          description: Offer list
+  /api/v1/marketplace/offers/{offer_id}:
+    get:
+      summary: Get offer details
+      parameters:
+        - in: path
+          name: offer_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Offer
+        '404':
+          description: Not found
+  /api/v1/merchant/offers:
+    get:
+      summary: List current merchant offers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Merchant offers
+        '403':
+          description: Forbidden
+    post:
+      summary: Create offer
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Offer created
+  /api/v1/merchant/offers/{offer_id}:
+    patch:
+      summary: Update merchant offer
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: offer_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Offer updated
+    delete:
+      summary: Archive merchant offer
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: offer_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Offer archived
+  /api/v1/merchant/profile:
+    get:
+      summary: Current merchant profile and reviews
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profile and reviews
+  /api/v1/marketplace/merchants/{merchant_id}/reviews:
+    get:
+      summary: Public merchant profile and reviews
+      parameters:
+        - in: path
+          name: merchant_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Merchant reviews
+  /api/v1/client/orders:
+    get:
+      summary: List current client orders
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Client orders
+        '403':
+          description: Forbidden
+  /api/v1/client/orders/{order_id}:
+    get:
+      summary: Read one client order
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: order_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Order
+        '403':
+          description: Forbidden
+  /api/v1/merchant/orders:
+    get:
+      summary: List current merchant orders
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Merchant orders
+  /api/v1/metrics/monthly-sales:
+    get:
+      summary: Monthly sales series
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Metrics series
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+

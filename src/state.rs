@@ -22,6 +22,8 @@ impl AppState {
             .max_connections(5)
             .connect(&config.database_url)
             .await?;
+        // Run database migrations on startup to ensure the schema is up to date.
+        sqlx::migrate!().run(&db).await?;
         let jwt_validator = Arc::new(JwtValidator::new(
             config.keycloak_jwks_uri.clone(),
             config.keycloak_issuer.clone(),

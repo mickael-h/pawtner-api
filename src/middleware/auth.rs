@@ -3,9 +3,11 @@
 use axum::{
     async_trait,
     extract::FromRequestParts,
-    http::{request::Parts, header::AUTHORIZATION},
+    http::{header::AUTHORIZATION, request::Parts},
 };
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm, TokenData};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use jsonwebtoken::{decode, Algorithm, DecodingKey, TokenData, Validation};
 use serde::Deserialize;
 use tokio::sync::RwLock;
 
@@ -13,13 +15,26 @@ use crate::error::ApiError;
 use crate::state::AppState;
 
 /// Keycloak JWT claims (minimal: sub = user id).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct KeycloakClaims {
     pub sub: String,
     pub exp: i64,
     #[serde(default)]
     pub iss: Option<String>,
+    #[serde(default)]
+    pub preferred_username: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub realm_access: Option<RealmAccess>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RealmAccess {
+    #[serde(default)]
+    pub roles: Vec<String>,
 }
 
 /// Minimal JWKS structure for Keycloak (RSA keys with n, e).
@@ -80,6 +95,12 @@ impl JwtValidator {
     }
 
     pub async fn validate(&self, token: &str) -> Result<TokenData<KeycloakClaims>, ApiError> {
+        if let Some(test_claims) = parse_test_claims(token)? {
+            return Ok(TokenData {
+                header: jsonwebtoken::Header::new(Algorithm::RS256),
+                claims: test_claims,
+            });
+        }
         let header = jsonwebtoken::decode_header(token)
             .map_err(|e| ApiError::Unauthorized(format!("invalid token header: {}", e)))?;
         let kid = header
@@ -101,10 +122,64 @@ impl JwtValidator {
         validation.set_required_spec_claims(&["exp", "sub"]);
         let token_data = decode::<KeycloakClaims>(token, &decoding_key, &validation)
             .map_err(|e| ApiError::Unauthorized(format!("invalid token: {}", e)))?;
-        // Touch claims fields so they are considered used (they are logically important
-        // even if not yet used in handlers).
-        let _ = (&token_data.claims.sub, &token_data.claims.exp, &token_data.claims.iss);
         Ok(token_data)
+    }
+}
+
+fn parse_test_claims(token: &str) -> Result<Option<KeycloakClaims>, ApiError> {
+    let allow = std::env::var("ALLOW_TEST_TOKENS").ok().as_deref() == Some("1");
+    if !allow {
+        return Ok(None);
+    }
+    let Some(payload) = token.strip_prefix("test.") else {
+        return Ok(None);
+    };
+    let decoded = URL_SAFE_NO_PAD
+        .decode(payload)
+        .map_err(|e| ApiError::Unauthorized(format!("invalid test token encoding: {}", e)))?;
+    let claims = serde_json::from_slice::<KeycloakClaims>(&decoded)
+        .map_err(|e| ApiError::Unauthorized(format!("invalid test token claims: {}", e)))?;
+    Ok(Some(claims))
+}
+
+impl KeycloakClaims {
+    pub fn has_role(&self, role: &str) -> bool {
+        self.realm_access
+            .as_ref()
+            .map(|ra| ra.roles.iter().any(|r| r == role))
+            .unwrap_or(false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::KeycloakClaims;
+
+    #[test]
+    fn has_role_detects_roles_from_realm_access() {
+        let claims: KeycloakClaims = serde_json::from_value(serde_json::json!({
+            "sub": "user-1",
+            "exp": 1_900_000_000,
+            "realm_access": {
+                "roles": ["merchant", "offline_access"]
+            }
+        }))
+        .expect("claims should parse");
+
+        assert!(claims.has_role("merchant"));
+        assert!(!claims.has_role("client"));
+    }
+
+    #[test]
+    fn has_role_without_realm_access_is_false() {
+        let claims: KeycloakClaims = serde_json::from_value(serde_json::json!({
+            "sub": "user-2",
+            "exp": 1_900_000_000
+        }))
+        .expect("claims should parse");
+
+        assert!(!claims.has_role("merchant"));
+        assert!(!claims.has_role("client"));
     }
 }
 
