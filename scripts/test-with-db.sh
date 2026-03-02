@@ -17,6 +17,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INFRA_DIR="$(cd "${ROOT_DIR}/../infra" && pwd)"
 COMPOSE_FILE="${INFRA_DIR}/docker-compose.yml"
 ENV_FILE="${ROOT_DIR}/.env"
+INFRA_ENV_FILE="${INFRA_DIR}/.env"
 
 KEEP_DB=0
 RUN_ALL=0
@@ -56,6 +57,13 @@ echo "Loading API env from $ENV_FILE"
 set -a
 source "$ENV_FILE"
 set +a
+
+if [[ -f "$INFRA_ENV_FILE" ]]; then
+  echo "Loading infra env from $INFRA_ENV_FILE"
+  set -a
+  source "$INFRA_ENV_FILE"
+  set +a
+fi
 
 export TEST_DATABASE_URL="${TEST_DATABASE_URL:-${DATABASE_URL:-}}"
 if [[ -z "${TEST_DATABASE_URL}" ]]; then

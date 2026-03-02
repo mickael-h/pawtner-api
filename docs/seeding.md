@@ -18,6 +18,9 @@ On startup, API executes `sqlx::migrate!()`:
 
 - Seed migration uses `ON CONFLICT` updates.
 - Running migrations repeatedly should not duplicate rows.
+- Identity linking is deterministic:
+  - if a seeded username has `keycloak_sub IS NULL`, the first authenticated request links it;
+  - if the same username is already linked to a different `sub`, API returns `403` (no implicit reassignment).
 
 ## Expected seeded entities
 

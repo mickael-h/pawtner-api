@@ -5,6 +5,35 @@ info:
 servers:
   - url: http://localhost:3000
 paths:
+  /health:
+    get:
+      summary: Healthcheck
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/me:
+    get:
+      summary: Keycloak userinfo proxy
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Raw userinfo response from Keycloak
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/me/context:
     get:
       summary: Current user context
@@ -13,6 +42,16 @@ paths:
       responses:
         '200':
           description: User context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeContextResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/marketplace/offers:
     get:
       summary: List marketplace offers
@@ -38,6 +77,14 @@ paths:
       responses:
         '200':
           description: Offer list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedOffer'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/marketplace/offers/{offer_id}:
     get:
       summary: Get offer details
@@ -49,8 +96,16 @@ paths:
       responses:
         '200':
           description: Offer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
         '404':
-          description: Not found
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/merchant/offers:
     get:
       summary: List current merchant offers
@@ -59,15 +114,43 @@ paths:
       responses:
         '200':
           description: Merchant offers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedOffer'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
         '403':
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalError'
     post:
       summary: Create offer
       security:
         - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOfferRequest'
       responses:
         '200':
           description: Offer created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/merchant/offers/{offer_id}:
     patch:
       summary: Update merchant offer
@@ -78,9 +161,29 @@ paths:
           name: offer_id
           required: true
           schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOfferRequest'
       responses:
         '200':
           description: Offer updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       summary: Archive merchant offer
       security:
@@ -93,6 +196,20 @@ paths:
       responses:
         '200':
           description: Offer archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/merchant/profile:
     get:
       summary: Current merchant profile and reviews
@@ -101,6 +218,18 @@ paths:
       responses:
         '200':
           description: Profile and reviews
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantProfileWithReviews'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/marketplace/merchants/{merchant_id}/reviews:
     get:
       summary: Public merchant profile and reviews
@@ -112,6 +241,16 @@ paths:
       responses:
         '200':
           description: Merchant reviews
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantProfileWithReviews'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/client/orders:
     get:
       summary: List current client orders
@@ -120,8 +259,16 @@ paths:
       responses:
         '200':
           description: Client orders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedOrder'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
         '403':
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/client/orders/{order_id}:
     get:
       summary: Read one client order
@@ -135,8 +282,18 @@ paths:
       responses:
         '200':
           description: Order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
         '403':
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/merchant/orders:
     get:
       summary: List current merchant orders
@@ -145,6 +302,16 @@ paths:
       responses:
         '200':
           description: Merchant orders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedOrder'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/metrics/monthly-sales:
     get:
       summary: Monthly sales series
@@ -153,10 +320,241 @@ paths:
       responses:
         '200':
           description: Metrics series
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
+  responses:
+    BadRequestError:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnauthorizedError:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ForbiddenError:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFoundError:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, INTERNAL_SERVER_ERROR]
+        message:
+          type: string
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+    MarketplaceUser:
+      type: object
+      required: [id, keycloak_username, role, email, display_name]
+      properties:
+        id: { type: string, format: uuid }
+        keycloak_sub: { type: string, nullable: true }
+        keycloak_username: { type: string }
+        role: { type: string, enum: [merchant, client] }
+        email: { type: string }
+        display_name: { type: string }
+    Offer:
+      type: object
+      required:
+        [id, offer_code, merchant_user_id, name, animal_type, breed, gender, birth_date, price_eur, location, listing_type, image_url, is_available_for_club, description, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        offer_code: { type: string }
+        merchant_user_id: { type: string, format: uuid }
+        name: { type: string }
+        animal_type: { type: string, enum: [dog, cat, horse] }
+        breed: { type: string }
+        gender: { type: string, enum: [M, F] }
+        birth_date: { type: string, format: date }
+        price_eur: { type: number }
+        location: { type: string }
+        listing_type: { type: string, enum: [sale, stud] }
+        image_url: { type: string }
+        cycle_status:
+          type: string
+          nullable: true
+          enum: [rest, heat, pregnancy, nursing]
+        is_available_for_club: { type: boolean }
+        description: { type: string }
+        status: { type: string, enum: [draft, published, archived] }
+        created_at: { type: string }
+    Order:
+      type: object
+      required: [id, order_code, client_user_id, merchant_user_id, offer_id, status, amount_eur, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        order_code: { type: string }
+        client_user_id: { type: string, format: uuid }
+        merchant_user_id: { type: string, format: uuid }
+        offer_id: { type: string, format: uuid }
+        status: { type: string, enum: [pending, confirmed, completed, cancelled] }
+        amount_eur: { type: number }
+        created_at: { type: string }
+        updated_at: { type: string }
+    MerchantProfile:
+      type: object
+      required: [merchant_user_id, profile_code, label_score, is_certified, is_family_style, location, specialties]
+      properties:
+        merchant_user_id: { type: string, format: uuid }
+        profile_code: { type: string }
+        label_score: { type: integer }
+        is_certified: { type: boolean }
+        is_family_style: { type: boolean }
+        location: { type: string }
+        specialties:
+          type: array
+          items: { type: string }
+    MerchantReview:
+      type: object
+      required: [id, review_code, merchant_user_id, author_name, rating, comment, reviewed_at]
+      properties:
+        id: { type: string, format: uuid }
+        review_code: { type: string }
+        merchant_user_id: { type: string, format: uuid }
+        author_name: { type: string }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string }
+        reviewed_at: { type: string, format: date }
+    MonthlySalesPoint:
+      type: object
+      required: [metric_year, month_index, amount_eur]
+      properties:
+        metric_year: { type: integer }
+        month_index: { type: integer, minimum: 1, maximum: 12 }
+        amount_eur: { type: number }
+    PagedOffer:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Offer'
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+    PagedOrder:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+    MeContextResponse:
+      type: object
+      required: [sub, exp, roles, marketplaceUser]
+      properties:
+        sub: { type: string }
+        exp: { type: integer }
+        iss: { type: string, nullable: true }
+        roles:
+          type: array
+          items: { type: string }
+        marketplaceUser:
+          $ref: '#/components/schemas/MarketplaceUser'
+    MerchantProfileWithReviews:
+      type: object
+      required: [profile, reviews]
+      properties:
+        profile:
+          $ref: '#/components/schemas/MerchantProfile'
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/MerchantReview'
+    MetricsResponse:
+      type: object
+      required: [series]
+      properties:
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthlySalesPoint'
+    CreateOfferRequest:
+      type: object
+      required:
+        [name, animal_type, breed, gender, birth_date, price_eur, location, listing_type, image_url, is_available_for_club, description]
+      properties:
+        name: { type: string }
+        animal_type: { type: string, enum: [dog, cat, horse] }
+        breed: { type: string }
+        gender: { type: string, enum: [M, F] }
+        birth_date: { type: string, format: date }
+        price_eur: { type: number, minimum: 0 }
+        location: { type: string }
+        listing_type: { type: string, enum: [sale, stud] }
+        image_url: { type: string }
+        cycle_status:
+          type: string
+          nullable: true
+          enum: [rest, heat, pregnancy, nursing]
+        is_available_for_club: { type: boolean }
+        description: { type: string }
+    UpdateOfferRequest:
+      type: object
+      properties:
+        name: { type: string }
+        animal_type: { type: string, enum: [dog, cat, horse] }
+        breed: { type: string }
+        gender: { type: string, enum: [M, F] }
+        birth_date: { type: string, format: date }
+        price_eur: { type: number, minimum: 0 }
+        location: { type: string }
+        listing_type: { type: string, enum: [sale, stud] }
+        image_url: { type: string }
+        cycle_status:
+          type: string
+          nullable: true
+          enum: [rest, heat, pregnancy, nursing]
+        is_available_for_club: { type: boolean }
+        description: { type: string }
+        status: { type: string, enum: [draft, published, archived] }
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-

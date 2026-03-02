@@ -23,7 +23,8 @@ All API errors return:
 
 - Authentication failures return `UNAUTHORIZED`.
 - Role/ownership violations return `FORBIDDEN`.
+- Identity-link conflicts (same username already bound to a different `sub`) return `FORBIDDEN`.
 - Missing resources return `NOT_FOUND`.
-- Input validation failures return `BAD_REQUEST`.
+- Input validation failures return `BAD_REQUEST` (malformed UUID, invalid enum-like values, invalid date format).
 - Unexpected failures return `INTERNAL_SERVER_ERROR`.
 

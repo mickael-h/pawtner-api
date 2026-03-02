@@ -11,7 +11,7 @@ Identity source:
 |---|---|---|---|
 | GET | `/health` | anonymous | none |
 | GET | `/api/v1/me` | authenticated | none |
-| GET | `/api/v1/me/context` | merchant, client | resolves caller from `sub` into `marketplace_users` |
+| GET | `/api/v1/me/context` | merchant, client | resolves caller from `sub` into `marketplace_users`; identity-link conflicts return `403` |
 | GET | `/api/v1/marketplace/offers` | anonymous | published offers by default |
 | GET | `/api/v1/marketplace/offers/:offer_id` | anonymous | none |
 | GET | `/api/v1/marketplace/merchants/:merchant_id/reviews` | anonymous | none |

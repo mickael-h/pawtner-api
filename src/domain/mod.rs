@@ -2,8 +2,12 @@
 
 pub mod marketplace;
 
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use uuid::Uuid;
+
+use crate::error::ApiError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -188,6 +192,69 @@ impl FromStr for CycleStatus {
             "nursing" => Ok(CycleStatus::Nursing),
             _ => Err(()),
         }
+    }
+}
+
+pub fn validate_uuid(value: &str, field: &str) -> Result<(), ApiError> {
+    Uuid::parse_str(value)
+        .map(|_| ())
+        .map_err(|_| ApiError::BadRequest(format!("invalid {}: expected UUID", field)))
+}
+
+pub fn validate_birth_date(value: &str, field: &str) -> Result<(), ApiError> {
+    NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|_| {
+        ApiError::BadRequest(format!(
+            "invalid {}: expected date format YYYY-MM-DD",
+            field
+        ))
+    })?;
+    Ok(())
+}
+
+pub fn validate_animal_type(value: &str, field: &str) -> Result<(), ApiError> {
+    AnimalType::from_str(value).map_err(|_| {
+        ApiError::BadRequest(format!(
+            "invalid {}: expected one of dog, cat, horse",
+            field
+        ))
+    })?;
+    Ok(())
+}
+
+pub fn validate_listing_type(value: &str, field: &str) -> Result<(), ApiError> {
+    ListingType::from_str(value).map_err(|_| {
+        ApiError::BadRequest(format!("invalid {}: expected one of sale, stud", field))
+    })?;
+    Ok(())
+}
+
+pub fn validate_offer_status(value: &str, field: &str) -> Result<(), ApiError> {
+    OfferStatus::from_str(value).map_err(|_| {
+        ApiError::BadRequest(format!(
+            "invalid {}: expected one of draft, published, archived",
+            field
+        ))
+    })?;
+    Ok(())
+}
+
+pub fn validate_cycle_status(value: &str, field: &str) -> Result<(), ApiError> {
+    CycleStatus::from_str(value).map_err(|_| {
+        ApiError::BadRequest(format!(
+            "invalid {}: expected one of rest, heat, pregnancy, nursing",
+            field
+        ))
+    })?;
+    Ok(())
+}
+
+pub fn validate_gender(value: &str, field: &str) -> Result<(), ApiError> {
+    match value {
+        "M" | "F" => Ok(()),
+        _ => Err(ApiError::BadRequest(format!(
+            "invalid {}: expected one of M, F",
+            field
+        ))),
     }
 }
 

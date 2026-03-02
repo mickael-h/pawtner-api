@@ -356,6 +356,28 @@ pub async fn ensure_marketplace_user(
         .unwrap_or_else(|| format!("{}@pawtner.local", claims.sub));
     let display_name = claims.name.clone().unwrap_or_else(|| username.clone());
 
+    let existing_sub_for_username = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT keycloak_sub
+        FROM marketplace_users
+        WHERE keycloak_username = $1
+          AND keycloak_sub IS NOT NULL
+        LIMIT 1
+        "#,
+    )
+    .bind(&username)
+    .fetch_optional(db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("db error: {}", e)))?;
+
+    if let Some(existing_sub) = existing_sub_for_username {
+        if existing_sub != claims.sub {
+            return Err(ApiError::Forbidden(
+                "identity conflict: username already linked to another subject".to_string(),
+            ));
+        }
+    }
+
     if let Some(linked) = sqlx::query_as::<_, MarketplaceUser>(
         r#"
         UPDATE marketplace_users
@@ -412,8 +434,18 @@ pub async fn list_public_offers(db: &PgPool, query: OffersQuery) -> Result<Paged
         let mut offers: Vec<Offer> = mock_offers()
             .into_iter()
             .filter(|o| query.status.as_deref().is_none_or(|s| o.status == s))
-            .filter(|o| query.animal_type.as_deref().is_none_or(|s| o.animal_type == s))
-            .filter(|o| query.listing_type.as_deref().is_none_or(|s| o.listing_type == s))
+            .filter(|o| {
+                query
+                    .animal_type
+                    .as_deref()
+                    .is_none_or(|s| o.animal_type == s)
+            })
+            .filter(|o| {
+                query
+                    .listing_type
+                    .as_deref()
+                    .is_none_or(|s| o.listing_type == s)
+            })
             .filter(|o| {
                 query
                     .location

@@ -10,13 +10,7 @@ use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tower::util::ServiceExt;
 
-fn test_token(
-    sub: &str,
-    username: &str,
-    email: &str,
-    name: &str,
-    roles: &[&str],
-) -> String {
+fn test_token(sub: &str, username: &str, email: &str, name: &str, roles: &[&str]) -> String {
     let claims = json!({
         "sub": sub,
         "exp": 4_000_000_000u64,
@@ -29,10 +23,7 @@ fn test_token(
     format!("test.{}", URL_SAFE_NO_PAD.encode(bytes))
 }
 
-async fn send_json(
-    app: axum::Router,
-    req: Request<Body>,
-) -> (StatusCode, serde_json::Value) {
+async fn send_json(app: axum::Router, req: Request<Body>) -> (StatusCode, serde_json::Value) {
     let resp = app.oneshot(req).await.expect("request should be served");
     let status = resp.status();
     let body = to_bytes(resp.into_body(), usize::MAX)
@@ -43,7 +34,7 @@ async fn send_json(
     (status, parsed)
 }
 
-async fn build_test_app() -> axum::Router {
+async fn build_test_app() -> (axum::Router, sqlx::PgPool) {
     std::env::set_var("ALLOW_TEST_TOKENS", "1");
     std::env::remove_var("MOCK_MARKETPLACE_DATA");
 
@@ -62,8 +53,19 @@ async fn build_test_app() -> axum::Router {
         .await
         .expect("migrations should run");
 
+    sqlx::query(
+        r#"
+        UPDATE marketplace_users
+        SET keycloak_sub = NULL
+        WHERE keycloak_username IN ('merchant_demo', 'client_demo', 'client_alice')
+        "#,
+    )
+    .execute(&db)
+    .await
+    .expect("should reset demo identity links for deterministic tests");
+
     let state = AppState {
-        db,
+        db: db.clone(),
         jwt_validator: Arc::new(JwtValidator::new(
             "http://localhost/unused-jwks".to_string(),
             "http://localhost/realms/pawtner".to_string(),
@@ -71,12 +73,12 @@ async fn build_test_app() -> axum::Router {
         )),
         keycloak_userinfo_uri: "http://localhost/unused-userinfo".to_string(),
     };
-    api_router(state)
+    (api_router(state), db)
 }
 
 #[tokio::test]
 async fn endpoints_happy_paths_and_common_errors() {
-    let app = build_test_app().await;
+    let (app, db) = build_test_app().await;
 
     let merchant_token = test_token(
         "sub-merchant-demo",
@@ -99,6 +101,13 @@ async fn endpoints_happy_paths_and_common_errors() {
         "Alice Martin",
         &["client"],
     );
+    let conflict_token = test_token(
+        "sub-conflict-new",
+        "conflict_identity",
+        "conflict.new@pawtner.local",
+        "Conflict User",
+        &["merchant"],
+    );
 
     let (status, _) = send_json(
         app.clone(),
@@ -110,6 +119,17 @@ async fn endpoints_happy_paths_and_common_errors() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = send_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri("/api/v1/marketplace/offers/not-a-uuid")
+            .body(Body::empty())
+            .expect("request should build"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 
     let (status, _) = send_json(
         app.clone(),
@@ -133,7 +153,64 @@ async fn endpoints_happy_paths_and_common_errors() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["marketplaceUser"]["keycloak_username"], "merchant_demo");
+
+    let invalid_enum_offer_body = json!({
+        "name": "Invalid Enum Offer",
+        "animal_type": "bird",
+        "breed": "N/A",
+        "gender": "M",
+        "birth_date": "2024-01-01",
+        "price_eur": 100.0,
+        "location": "Lyon, FR",
+        "listing_type": "sale",
+        "image_url": "https://example.org/invalid.jpg",
+        "cycle_status": null,
+        "is_available_for_club": false,
+        "description": "Invalid enum payload"
+    });
+    let (status, _) = send_json(
+        app.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/v1/merchant/offers")
+            .header("Authorization", format!("Bearer {}", merchant_token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(invalid_enum_offer_body.to_string()))
+            .expect("request should build"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let invalid_date_offer_body = json!({
+        "name": "Invalid Date Offer",
+        "animal_type": "dog",
+        "breed": "N/A",
+        "gender": "M",
+        "birth_date": "2024-99-01",
+        "price_eur": 100.0,
+        "location": "Lyon, FR",
+        "listing_type": "sale",
+        "image_url": "https://example.org/invalid-date.jpg",
+        "cycle_status": null,
+        "is_available_for_club": false,
+        "description": "Invalid date payload"
+    });
+    let (status, _) = send_json(
+        app.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/v1/merchant/offers")
+            .header("Authorization", format!("Bearer {}", merchant_token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(invalid_date_offer_body.to_string()))
+            .expect("request should build"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body["marketplaceUser"]["keycloak_username"],
+        "merchant_demo"
+    );
 
     let (status, body) = send_json(
         app.clone(),
@@ -145,11 +222,13 @@ async fn endpoints_happy_paths_and_common_errors() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body["items"]
-        .as_array()
-        .expect("items should be array")
-        .len()
-        >= 1);
+    assert!(
+        body["items"]
+            .as_array()
+            .expect("items should be array")
+            .len()
+            >= 1
+    );
 
     let (status, _) = send_json(
         app.clone(),
@@ -173,6 +252,40 @@ async fn endpoints_happy_paths_and_common_errors() {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+
+    sqlx::query(
+        r#"
+        INSERT INTO marketplace_users (id, keycloak_sub, keycloak_username, role, email, display_name)
+        VALUES ($1::uuid, $2, $3, $4, $5, $6)
+        ON CONFLICT (keycloak_username) DO UPDATE
+        SET keycloak_sub = EXCLUDED.keycloak_sub,
+            role = EXCLUDED.role,
+            email = EXCLUDED.email,
+            display_name = EXCLUDED.display_name
+        "#,
+    )
+    .bind("99999999-9999-4999-8999-999999999999")
+    .bind("sub-conflict-existing")
+    .bind("conflict_identity")
+    .bind("merchant")
+    .bind("conflict.existing@pawtner.local")
+    .bind("Conflict Existing")
+    .execute(&db)
+    .await
+    .expect("should setup conflict identity row");
+
+    let (status, body) = send_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri("/api/v1/me/context")
+            .header("Authorization", format!("Bearer {}", conflict_token))
+            .body(Body::empty())
+            .expect("request should build"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"]["code"], "FORBIDDEN");
 
     let (status, _) = send_json(
         app.clone(),
@@ -356,4 +469,3 @@ async fn endpoints_happy_paths_and_common_errors() {
             >= 6
     );
 }
-

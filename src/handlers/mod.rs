@@ -12,7 +12,10 @@ use crate::domain::marketplace::{
     list_merchant_offers, list_merchant_orders, list_monthly_sales_metrics, list_public_offers,
     require_role, NewOffer, OffersQuery, UpdateOffer,
 };
-use crate::domain::UserRole;
+use crate::domain::{
+    validate_animal_type, validate_birth_date, validate_cycle_status, validate_gender,
+    validate_listing_type, validate_offer_status, validate_uuid, UserRole,
+};
 use crate::error::ApiError;
 use crate::middleware::{AuthUser, RawBearerToken};
 use crate::state::AppState;
@@ -88,6 +91,15 @@ pub async fn marketplace_offers(
     State(state): State<AppState>,
     Query(query): Query<OffersQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    if let Some(animal_type) = query.animal_type.as_deref() {
+        validate_animal_type(animal_type, "animal_type")?;
+    }
+    if let Some(listing_type) = query.listing_type.as_deref() {
+        validate_listing_type(listing_type, "listing_type")?;
+    }
+    if let Some(status) = query.status.as_deref() {
+        validate_offer_status(status, "status")?;
+    }
     let paged = list_public_offers(&state.db, query).await?;
     Ok(Json(json!(paged)))
 }
@@ -97,6 +109,7 @@ pub async fn marketplace_offer_by_id(
     State(state): State<AppState>,
     Path(offer_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    validate_uuid(&offer_id, "offer_id")?;
     let offer = get_offer_by_id(&state.db, &offer_id).await?;
     Ok(Json(json!(offer)))
 }
@@ -108,6 +121,9 @@ pub async fn merchant_offers(
     Query(query): Query<OffersQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&claims, UserRole::Merchant)?;
+    if let Some(status) = query.status.as_deref() {
+        validate_offer_status(status, "status")?;
+    }
     let merchant = ensure_marketplace_user(&state.db, &claims).await?;
     let paged = list_merchant_offers(&state.db, &merchant.id, query).await?;
     Ok(Json(json!(paged)))
@@ -120,6 +136,13 @@ pub async fn merchant_create_offer(
     Json(input): Json<NewOffer>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&claims, UserRole::Merchant)?;
+    validate_animal_type(&input.animal_type, "animal_type")?;
+    validate_listing_type(&input.listing_type, "listing_type")?;
+    validate_gender(&input.gender, "gender")?;
+    validate_birth_date(&input.birth_date, "birth_date")?;
+    if let Some(cycle_status) = input.cycle_status.as_deref() {
+        validate_cycle_status(cycle_status, "cycle_status")?;
+    }
     let merchant = ensure_marketplace_user(&state.db, &claims).await?;
     let created = create_merchant_offer(&state.db, &merchant.id, input).await?;
     Ok(Json(json!(created)))
@@ -133,6 +156,25 @@ pub async fn merchant_update_offer(
     Json(input): Json<UpdateOffer>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&claims, UserRole::Merchant)?;
+    validate_uuid(&offer_id, "offer_id")?;
+    if let Some(animal_type) = input.animal_type.as_deref() {
+        validate_animal_type(animal_type, "animal_type")?;
+    }
+    if let Some(listing_type) = input.listing_type.as_deref() {
+        validate_listing_type(listing_type, "listing_type")?;
+    }
+    if let Some(status) = input.status.as_deref() {
+        validate_offer_status(status, "status")?;
+    }
+    if let Some(cycle_status) = input.cycle_status.as_deref() {
+        validate_cycle_status(cycle_status, "cycle_status")?;
+    }
+    if let Some(gender) = input.gender.as_deref() {
+        validate_gender(gender, "gender")?;
+    }
+    if let Some(birth_date) = input.birth_date.as_deref() {
+        validate_birth_date(birth_date, "birth_date")?;
+    }
     let merchant = ensure_marketplace_user(&state.db, &claims).await?;
     let updated = crate::domain::marketplace::update_merchant_offer(
         &state.db,
@@ -151,6 +193,7 @@ pub async fn merchant_delete_offer(
     Path(offer_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&claims, UserRole::Merchant)?;
+    validate_uuid(&offer_id, "offer_id")?;
     let merchant = ensure_marketplace_user(&state.db, &claims).await?;
     let archived = archive_merchant_offer(&state.db, &merchant.id, &offer_id).await?;
     Ok(Json(json!(archived)))
@@ -176,6 +219,7 @@ pub async fn merchant_reviews(
     State(state): State<AppState>,
     Path(merchant_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    validate_uuid(&merchant_id, "merchant_id")?;
     let profile = get_merchant_profile(&state.db, &merchant_id).await?;
     let reviews = get_merchant_reviews(&state.db, &merchant_id).await?;
     Ok(Json(json!({
@@ -209,6 +253,7 @@ pub async fn client_order_by_id(
     Path(order_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&claims, UserRole::Client)?;
+    validate_uuid(&order_id, "order_id")?;
     let client = ensure_marketplace_user(&state.db, &claims).await?;
     let order = get_client_order(&state.db, &client.id, &order_id).await?;
     Ok(Json(json!(order)))
