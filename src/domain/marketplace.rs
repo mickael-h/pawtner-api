@@ -405,10 +405,18 @@ pub async fn ensure_marketplace_user(
     }
 
     let user_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, claims.sub.as_bytes()).to_string();
-    sqlx::query_as::<_, MarketplaceUser>(
+    if let Some(upserted) = sqlx::query_as::<_, MarketplaceUser>(
         r#"
         INSERT INTO marketplace_users (id, keycloak_sub, keycloak_username, role, email, display_name)
         VALUES ($1::uuid, $2, $3, $4, $5, $6)
+        ON CONFLICT (keycloak_username) DO UPDATE
+        SET
+          keycloak_sub = EXCLUDED.keycloak_sub,
+          role = EXCLUDED.role,
+          email = EXCLUDED.email,
+          display_name = EXCLUDED.display_name
+        WHERE marketplace_users.keycloak_sub IS NULL
+           OR marketplace_users.keycloak_sub = EXCLUDED.keycloak_sub
         RETURNING
           id::text AS id,
           keycloak_sub,
@@ -424,9 +432,70 @@ pub async fn ensure_marketplace_user(
     .bind(role_str)
     .bind(&email)
     .bind(&display_name)
-    .fetch_one(db)
+    .fetch_optional(db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("db insert error: {}", e)))
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("db upsert error: {}", e)))?
+    {
+        return Ok(upserted);
+    }
+
+    tracing::warn!(
+        username = %username,
+        sub = %claims.sub,
+        "concurrent marketplace_user link recovered via reload"
+    );
+
+    let existing = sqlx::query_as::<_, MarketplaceUser>(
+        r#"
+        SELECT
+          id::text AS id,
+          keycloak_sub,
+          keycloak_username,
+          role,
+          email,
+          display_name
+        FROM marketplace_users
+        WHERE keycloak_username = $1
+        LIMIT 1
+        "#,
+    )
+    .bind(&username)
+    .fetch_optional(db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("db reload error: {}", e)))?
+    .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("username row missing after upsert")))?;
+
+    if existing.keycloak_sub.as_deref() == Some(claims.sub.as_str()) {
+        return Ok(existing);
+    }
+    if existing.keycloak_sub.is_none() {
+        return sqlx::query_as::<_, MarketplaceUser>(
+            r#"
+            UPDATE marketplace_users
+            SET keycloak_sub = $1, role = $2, email = $3, display_name = $4
+            WHERE keycloak_username = $5 AND keycloak_sub IS NULL
+            RETURNING
+              id::text AS id,
+              keycloak_sub,
+              keycloak_username,
+              role,
+              email,
+              display_name
+            "#,
+        )
+        .bind(&claims.sub)
+        .bind(role_str)
+        .bind(&email)
+        .bind(&display_name)
+        .bind(&username)
+        .fetch_one(db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("db relink error: {}", e)));
+    }
+
+    Err(ApiError::Forbidden(
+        "identity conflict: username already linked to another subject".to_string(),
+    ))
 }
 
 pub async fn list_public_offers(db: &PgPool, query: OffersQuery) -> Result<Paged<Offer>, ApiError> {

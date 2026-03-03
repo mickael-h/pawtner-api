@@ -101,6 +101,13 @@ async fn endpoints_happy_paths_and_common_errors() {
         "Alice Martin",
         &["client"],
     );
+    let concurrent_link_token = test_token(
+        "sub-concurrent-link",
+        "concurrent_link_user",
+        "concurrent.link@pawtner.local",
+        "Concurrent Link",
+        &["merchant"],
+    );
     let conflict_token = test_token(
         "sub-conflict-new",
         "conflict_identity",
@@ -153,6 +160,53 @@ async fn endpoints_happy_paths_and_common_errors() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    let first_user_id = body["marketplaceUser"]["id"]
+        .as_str()
+        .expect("marketplace user id should exist")
+        .to_string();
+
+    let (status, body) = send_json(
+        app.clone(),
+        Request::builder()
+            .method("GET")
+            .uri("/api/v1/me/context")
+            .header("Authorization", format!("Bearer {}", merchant_token))
+            .body(Body::empty())
+            .expect("request should build"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["marketplaceUser"]["id"], first_user_id);
+
+    sqlx::query("DELETE FROM marketplace_users WHERE keycloak_username = $1")
+        .bind("concurrent_link_user")
+        .execute(&db)
+        .await
+        .expect("should cleanup concurrent link user before test");
+
+    let request_a = Request::builder()
+        .method("GET")
+        .uri("/api/v1/me/context")
+        .header("Authorization", format!("Bearer {}", concurrent_link_token))
+        .body(Body::empty())
+        .expect("request should build");
+    let request_b = Request::builder()
+        .method("GET")
+        .uri("/api/v1/me/context")
+        .header("Authorization", format!("Bearer {}", concurrent_link_token))
+        .body(Body::empty())
+        .expect("request should build");
+
+    let (resp_a, resp_b) = tokio::join!(
+        send_json(app.clone(), request_a),
+        send_json(app.clone(), request_b)
+    );
+    assert_eq!(resp_a.0, StatusCode::OK);
+    assert_eq!(resp_b.0, StatusCode::OK);
+    assert_eq!(
+        resp_a.1["marketplaceUser"]["id"],
+        resp_b.1["marketplaceUser"]["id"]
+    );
 
     let invalid_enum_offer_body = json!({
         "name": "Invalid Enum Offer",
